@@ -29,12 +29,15 @@ if torch.cuda.is_available():
 
 debug = False
 
+global_d_type = torch.float
+
 network = StdDETransformer(
     vocab_size=vocab_size,
     d_embedding=64,
     max_context_window=context_window,
     transformer_depth=1,
-    dropout=0.1
+    dropout=0.1,
+    d_type=global_d_type,
 )
 
 saved_models_folder = "./saved_models"
@@ -47,7 +50,6 @@ if not os.path.isfile("./saved_models/encoder_decoder_std.pt"):
         context_window=context_window,
         epochs=30,
         batch_size=64,
-        training_size=10,
         writer=board_writer
     ).train_ds(ds=ds)
 

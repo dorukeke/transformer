@@ -2,8 +2,9 @@ import math
 
 import numpy as np
 import torch
-from torch import nn
+from torch import nn, Tensor
 from torch.nn import Transformer
+from torch.nn.parameter import Parameter
 
 
 class PositionalEncoding(nn.Module):
@@ -20,8 +21,8 @@ class PositionalEncoding(nn.Module):
         return x + self.pe[:, :x.size(1)]
 
 
-def get_causal_mask(for_size: int):
-    return ((1 - torch.triu(torch.ones(for_size, for_size), diagonal=1)).bool() != True).requires_grad_(False).cuda()
+def get_causal_mask(for_size: int, dtype: torch.dtype) -> Tensor:
+    return (1 - torch.triu(torch.ones(for_size, for_size, dtype=dtype), diagonal=1)).bool() != True
 
 
 def _init_weights(module):
@@ -42,30 +43,33 @@ class StdDETransformer(nn.Module):
                  vocab_size: int = 1024,
                  transformer_depth: int = 6,
                  max_context_window: int = 512,
-                 dropout: float = 0.1):
+                 dropout: float = 0.1,
+                 d_type: torch.dtype = torch.float32):
         super().__init__()
         self.vocab_size = vocab_size
         self.d_embedding = d_embedding
         self.max_context_window = max_context_window
-        self.encoder_embedding = nn.Embedding(self.vocab_size, self.d_embedding, dtype=torch.float32)
-        self.decoder_embedding = nn.Embedding(self.vocab_size, self.d_embedding, dtype=torch.float32)
+        self.encoder_embedding = nn.Embedding(self.vocab_size, self.d_embedding, dtype=d_type)
+        self.decoder_embedding = nn.Embedding(self.vocab_size, self.d_embedding, dtype=d_type)
         self.positional = PositionalEncoding(d_embedding, max_context_window=max_context_window)
         self.transformer = Transformer(
             d_model=self.d_embedding,
             batch_first=True,
-            dtype=torch.float32,
+            dtype=d_type,
             activation=nn.GELU(),
             dropout=dropout,
             num_encoder_layers=transformer_depth,
             num_decoder_layers=transformer_depth
         )
 
-        self.classifier = nn.Linear(self.d_embedding, vocab_size, dtype=torch.float32)
-        self.normalization_factor = torch.sqrt(torch.tensor(self.max_context_window)).requires_grad_(False)
+        self.classifier = nn.Linear(self.d_embedding, vocab_size, dtype=d_type)
 
         self.apply(_init_weights)
 
-        self.training_causal_mask = get_causal_mask(for_size=self.max_context_window)
+        self.training_causal_mask = Parameter(
+            get_causal_mask(for_size=self.max_context_window, dtype=d_type),
+            requires_grad=False
+        )
 
     def forward(self, encoder_input, decoder_input):
         enc_embedding = self.encoder_embedding(encoder_input)

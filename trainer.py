@@ -33,7 +33,7 @@ def ddp_setup(rank: int, world_size: int):
 
 class StandardTrainer:
     def __init__(self, net: StdDETransformer, device, tokenizer: Tokenizer, context_window: int = 1024,
-                 batch_size: int = 64, training_size: int = 50, epochs: int = 50, writer: SummaryWriter = None):
+                 batch_size: int = 64, epochs: int = 50, writer: SummaryWriter = None):
         super().__init__()
         self.net = net
         self.optimizer = optim.AdamW(net.parameters(), lr=1e-3, weight_decay=1e-5)
@@ -45,7 +45,6 @@ class StandardTrainer:
         self.context_window = context_window
         self.max_tokens = self.context_window - 4
         self.batch_size = batch_size
-        self.training_size = training_size
         self.epochs = epochs
         self.writer: SummaryWriter = writer
 
@@ -118,7 +117,8 @@ class StandardTrainer:
     def eval_ds(self, input_tokens: [int], output_tokens: [int]):
         eval_loss = 0
         with torch.no_grad():
-            decoder_input_batch, decoder_output_batch, encoder_input_batch = self.prepare_batches(input_tokens, output_tokens)
+            decoder_input_batch, decoder_output_batch, encoder_input_batch = self.prepare_batches(input_tokens,
+                                                                                                  output_tokens)
 
             if len(encoder_input_batch) == 0:
                 return 0
@@ -159,7 +159,8 @@ class StandardTrainer:
             for idx in tqdm(range(train_length), desc="Training", position=0):
                 output_tokens = train_ds[ARTICLE_TOKENS][idx]
                 input_tokens = train_ds[TITLE_TOKENS][idx]
-                decoder_input_batch, decoder_output_batch, encoder_input_batch = self.prepare_batches(input_tokens, output_tokens)
+                decoder_input_batch, decoder_output_batch, encoder_input_batch = self.prepare_batches(input_tokens,
+                                                                                                      output_tokens)
 
                 if len(encoder_input_batch) == 0:
                     continue
@@ -231,5 +232,7 @@ class StandardTrainer:
 
     def log_parameters(self, parent_name: str, current_module: nn.Module, epoch: int):
         for param_name, param in current_module.named_parameters():
+            if param_name is "training_causal_mask":
+                continue
             self.writer.add_histogram(parent_name + "/" + param_name, param, epoch)
             self.writer.add_histogram(parent_name + "/" + param_name + "/grad", param.grad, epoch)
